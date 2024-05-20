@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using Exiled.API.Features;
 using Exiled.Events.EventArgs.Player;
-using Exiled.Permissions.Commands.Permissions;
 using PlayerRoles;
 using Random = UnityEngine.Random;
 
@@ -12,20 +11,24 @@ namespace CoinLottery
 {
     public class EventHandlers
     {
+        /** 配置 */
         private Config Config { get; }
-        private readonly ArrayList _playerList = new ArrayList(); // 游玩玩家列表
 
-        private readonly ArrayList _deadPlayerList = new ArrayList(); // 已死亡玩家列表
-        // private CustomCoinEvents _customCoinEvents = new CustomCoinEvents();
+        /** 游玩玩家列表 */
+        private readonly ArrayList _playerList = new ArrayList();
+
+        /** 死亡玩家列表 */
+        private readonly ArrayList _deadPlayerList = new ArrayList();
 
         public EventHandlers(Config config)
         {
             Config = config;
         }
 
-        /**
-         * 翻硬币时调用
-         */
+        /// <summary>
+        /// 投硬币时调用
+        /// </summary>
+        /// <param name="ev">事件</param>
         public void OnFlippingCoin(FlippingCoinEventArgs ev)
         {
             if (Config.Debug)
@@ -36,9 +39,10 @@ namespace CoinLottery
             RandomMethods.RandomMethod(ev.Player, _playerList, _deadPlayerList);
         }
 
-        /**
-         * 人物重生时调用
-         */
+        /// <summary>
+        /// 玩家生成时调用
+        /// </summary>
+        /// <param name="ev">事件</param>
         public void OnSpawned(SpawnedEventArgs ev)
         {
             var player = ev.Player;
@@ -49,58 +53,87 @@ namespace CoinLottery
 
             if (_playerList.Contains(player)) return; // 如果玩家已经在玩家列表，则不添加玩家
             _playerList.Add(player); // 添加玩家至玩家列表
-            if (Config.Debug)
-            {
-                Log.Debug($"{player.Nickname} OnSpawned");
-            }
+            if (!Config.Debug) return;
+            Log.Info($"OnSpawned _playerList: {_playerList}");
+            Log.Info($"OnSpawned: {player.Nickname} OnSpawned");
         }
 
-
+        /// <summary>
+        /// 玩家死亡时调用
+        /// </summary>
+        /// <param name="ev">事件</param>
         public void OnDied(DiedEventArgs ev)
         {
             var player = ev.Player;
             _playerList.Remove(player); // 死亡时移出玩家列表
             if (_deadPlayerList.Contains(player)) return;
             _deadPlayerList.Add(player);
-            if (Config.Debug)
-            {
-                Log.Debug($"{player.Nickname} OnDied");
-            }
+            if (!Config.Debug) return;
+            Log.Info($"OnDied _deadPlayerList: {_deadPlayerList}");
+            Log.Info($"OnDied: {player.Nickname} OnDied");
         }
     }
 
+    /// <summary>
+    /// 批量显示提示，用于在多个事件中一次性显示多个提示而不会被覆盖
+    /// </summary>
     public static class BulkShowHint
     {
         private static Player _player;
         private static string _message = "";
 
+        /// <summary>
+        /// 设置显示提示的玩家
+        /// </summary>
+        /// <param name="player">要显示提示的玩家</param>
         public static void SetPlayer(Player player)
         {
             _player = player;
         }
-        
-        public static void Add(string message, string split = "\n")
+
+        /// <summary>
+        /// 添加提示
+        /// </summary>
+        /// <param name="message">提示信息</param>
+        /// <param name="endSplit">结尾分隔符（默认换行）</param>
+        public static void Add(string message, string endSplit = "\n")
         {
-            _message += message + split;
+            _message += message + endSplit;
         }
-        
+
+        /// <summary>
+        /// 清空加入的所有提示
+        /// </summary>
         public static void Clear()
         {
             _message = "";
         }
-        
+
+        /// <summary>
+        /// 显示加入的所有提示
+        /// </summary>
         public static void Show()
         {
             _player.ShowHint(_message);
         }
     }
 
+    /// <summary>
+    /// 随机事件
+    /// </summary>
     public abstract class RandomMethods
     {
+        /// <summary>
+        /// 随机事件
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
+        /// <param name="playerList">活着的玩家列表</param>
+        /// <param name="deadPlayerList">已死亡的玩家列表</param>
         public static void RandomMethod(Player player, ArrayList playerList, ArrayList deadPlayerList)
         {
-            var rand = Random.Range(0, 1000);
-            BulkShowHint.SetPlayer(player);
+            var rand = Random.Range(0, 1000); // 生成0-999的随机数
+            BulkShowHint.SetPlayer(player); // 设置显示提示的玩家
+            // 事件概率，概率单位为千分之一 例子： new KeyValuePair<int, Action>(概率, () => 要执行的事件),
             var eventOdds = new List<KeyValuePair<int, Action>>
             {
                 new KeyValuePair<int, Action>(5, () => TurnToRandomScp(player)),
@@ -111,35 +144,41 @@ namespace CoinLottery
                 new KeyValuePair<int, Action>(5, () => CustomCoinEvents.GiveItem(player, ItemType.KeycardO5)),
                 new KeyValuePair<int, Action>(5, () => CustomCoinEvents.GiveItem(player, ItemType.Jailbird)),
                 new KeyValuePair<int, Action>(5, () => CustomCoinEvents.GiveItem(player, ItemType.SCP207)),
-                new KeyValuePair<int, Action>(5, () => RandomTurnOffZoneLight(player)),
+                new KeyValuePair<int, Action>(5, RandomTurnOffZoneLight),
                 new KeyValuePair<int, Action>(5, () => CustomCoinEvents.DropAllItems(player)),
                 new KeyValuePair<int, Action>(10, () => RandomControlOther(player, deadPlayerList)),
                 new KeyValuePair<int, Action>(410, () => GiveRandomItem(player)),
                 new KeyValuePair<int, Action>(545, () => BulkShowHint.Add("什么事都没发生")),
             };
+            // 遍历事件概率，执行事件
             var odds = 0;
             foreach (var eventOdd in eventOdds)
             {
-                odds += eventOdd.Key;
-                if (rand > odds) continue;
-                eventOdd.Value.Invoke();
-                break;
+                odds += eventOdd.Key; // 累加概率
+                if (rand > odds) continue; // 如果随机数大于累加概率则继续循环
+                eventOdd.Value.Invoke(); // 执行事件
+                break; // 执行完事件后跳出循环
             }
 
+            // 有一定概率移除硬币
             rand = Random.Range(0, 10);
             if (rand <= 3)
             {
                 CustomCoinEvents.RemoveCoin(player);
             }
+
+            // 显示前面加入的所有提示
             BulkShowHint.Show();
             BulkShowHint.Clear();
         }
 
-        /**
-         * 随机成为SCP
-         */
+        /// <summary>
+        /// 变成随机SCP
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
         private static void TurnToRandomScp(Player player)
         {
+            // 可以变成的SCP角色id列表
             var roleTypeIds = new[]
             {
                 RoleTypeId.Scp049, RoleTypeId.Scp096, RoleTypeId.Scp106, RoleTypeId.Scp173,
@@ -148,18 +187,20 @@ namespace CoinLottery
             var rand = Random.Range(0, 6);
             var roleTypeId = roleTypeIds[rand];
             CustomCoinEvents.TurnToRole(player, roleTypeId);
-            if (roleTypeId != RoleTypeId.Scp0492) return;
+            if (roleTypeId != RoleTypeId.Scp0492) return;  // 如果不是SCP-049-2则不执行下面的代码
             // 给武器和设置血量为500
             player.CurrentItem = player.AddItem(ItemType.GunCOM15);
             player.MaxHealth = 500;
             player.Health = 500;
         }
 
-        /**
-         * 随机给予物品
-         */
+        /// <summary>
+        /// 随机给玩家物品
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
         private static void GiveRandomItem(Player player)
         {
+            // 排除的物品id列表
             var excludeItemIds = new[]
             {
                 ItemType.ParticleDisruptor, ItemType.GunCom45, ItemType.Ammo9x19, ItemType.Ammo12gauge,
@@ -167,67 +208,105 @@ namespace CoinLottery
                 ItemType.Jailbird, ItemType.SCP207, ItemType.SCP268, ItemType.GunFRMG0, ItemType.GunLogicer,
                 ItemType.GunShotgun, ItemType.SCP1853, ItemType.SCP018
             };
-            // excludeItemIds.Contains(ItemType.Adrenaline);
             var rand = (ItemType)Random.Range(0, 54);
-            var times = 0;
+            var times = 0;  // 防止死循环
+            // 随机物品id，直到不在排除的物品id列表中
             while (excludeItemIds.Contains(rand) && times < excludeItemIds.Length)
             {
                 rand = (ItemType)Random.Range(0, 54);
                 times++;
             }
 
+            // 如果随机物品id在排除的物品id列表中，则提示什么都没得到，否则给物品
             if (excludeItemIds.Contains(rand))
             {
                 BulkShowHint.Add("头好痒，好像什么都没得到");
+                Log.Info("GiveRandomItem: 随机物品获取失败");
+                return;
             }
 
             CustomCoinEvents.GiveItem(player, rand);
         }
 
-        /**
-         * 随机目标复制物品
-         */
-        private static void CopyRandomPlayerInventory(Player player, ArrayList playerList)
+        /// <summary>
+        /// 复制随机玩家的背包
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
+        /// <param name="simplePlayerList">要被随机选取的玩家列表</param>
+        private static void CopyRandomPlayerInventory(Player player, ArrayList simplePlayerList)
         {
-            var rand = Random.Range(0, playerList.Count);
-            var randPlayer = (Player)playerList[rand];
-            CustomCoinEvents.CopyOthersInventory(player, randPlayer);
-        }
-
-        /**
-         * 随机区域断电
-         */
-        private static void RandomTurnOffZoneLight(Player player)
-        {
-            var rand = Random.Range(1, 5);
-            CustomCoinEvents.TurnOffLight(player, (MapGeneration.FacilityZone)rand);
-        }
-
-        /**
-         * 被某人夺舍
-         */
-        private static void RandomControlOther(Player player, ArrayList deadPlayerList)
-        {
-            var playerCount = deadPlayerList.Count;
-            var targetPlayer = (Player)deadPlayerList[Random.Range(0, playerCount)];
-            var times = 0;
-            while (!targetPlayer.IsOverwatchEnabled && times < playerCount)
+            var playerListCount = simplePlayerList.Count;  // 玩家数量
+            var rand = Random.Range(0, playerListCount);
+            var randPlayer = (Player)simplePlayerList[rand];
+            var times = 0;  // 防止死循环
+            // 随机玩家，直到不是当前玩家
+            while (randPlayer.Id == player.Id && times < playerListCount)
             {
-                targetPlayer = (Player)deadPlayerList[Random.Range(0, playerCount)];
+                rand = Random.Range(0, playerListCount);
+                randPlayer = (Player)simplePlayerList[rand];
                 times++;
             }
 
+            // 如果随机目标是当前玩家，则提示什么都没发生，否则复制randPlayer的物品
+            if (randPlayer.Id == player.Id)
+            {
+                BulkShowHint.Add("你感受到了一阵空间波动，但什么都没发生");
+                Log.Info("CopyRandomPlayerInventory: 随机目标复制物品失败");
+                return;
+            }
+
+            CustomCoinEvents.CopyOthersInventory(player, randPlayer);
+        }
+
+        /// <summary>
+        /// 随机关闭区域灯光
+        /// </summary>
+        private static void RandomTurnOffZoneLight()
+        {
+            var rand = Random.Range(1, 5);
+            CustomCoinEvents.TurnOffLight((MapGeneration.FacilityZone)rand);
+        }
+
+        /// <summary>
+        /// 随机控制（夺舍）其他玩家
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
+        /// <param name="simplePlayerList">要被随机选取的玩家列表</param>
+        private static void RandomControlOther(Player player, ArrayList simplePlayerList)
+        {
+            var playerCount = simplePlayerList.Count;
+            if (playerCount == 0)
+            {
+                BulkShowHint.Add("你试图夺舍，但是没有目标");
+            }
+
+            var targetPlayer = (Player)simplePlayerList[Random.Range(0, playerCount)];
+            var times = 0;
+            
+            // 随机玩家，直到玩家为观察者或者遍历完所有玩家
+            while (!targetPlayer.IsOverwatchEnabled && times < playerCount)
+            {
+                targetPlayer = (Player)simplePlayerList[Random.Range(0, playerCount)];
+                times++;
+            }
+
+            // 如果玩家为观察者，则提示夺舍失败，否则控制（夺舍）玩家
             if (!targetPlayer.IsOverwatchEnabled)
             {
                 BulkShowHint.Add("有人试图夺舍你，但是失败了");
+                return;
             }
 
             CustomCoinEvents.ControlOther(player, targetPlayer);
         }
     }
 
+    /// <summary>
+    /// 自定义硬币事件
+    /// </summary>
     public abstract class CustomCoinEvents
     {
+        /** 物品中文名 */
         private static readonly IDictionary Zh = new Dictionary<string, string>
         {
             { "KeycardJanitor", "清洁工钥匙卡" },
@@ -282,6 +361,7 @@ namespace CoinLottery
             { "Lantern", "手提灯" },
         };
 
+        /** 区域中文名 */
         private static readonly IDictionary ZoneZh = new Dictionary<MapGeneration.FacilityZone, string>
         {
             { MapGeneration.FacilityZone.LightContainment, "轻收容区" },
@@ -290,35 +370,45 @@ namespace CoinLottery
             { MapGeneration.FacilityZone.Surface, "地表" },
         };
 
-        /**
-         * 转换角色
-         */
+        /// <summary>
+        /// 变成指定角色
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
+        /// <param name="role">变成的角色id</param>
         public static void TurnToRole(Player player, RoleTypeId role)
         {
-            var roleName = Enum.GetName(typeof(RoleTypeId), role);
-            player.DropItems();
-            player.RoleManager.ServerSetRole(role, RoleChangeReason.Respawn, RoleSpawnFlags.UseSpawnpoint);
+            var roleName = Enum.GetName(typeof(RoleTypeId), role);  // 获取角色名
+            DropAllItems(player);  // 丢弃所有物品
+            player.RoleManager.ServerSetRole(role, RoleChangeReason.Respawn, RoleSpawnFlags.UseSpawnpoint);  // 变成指定角色
             BulkShowHint.Add($"你已经变成了 <color=#FF0000>{roleName}</color>");
             Map.ShowHint($"{player.Nickname} 变成了 <color=#F4F245>{roleName}</color>");
-            Log.Info($"{player.Nickname} 变成了 {roleName}");
+            Log.Info($"TurnToRole: {player.Nickname} 变成了 {roleName}");
         }
 
-        /**
-         * 给指定物品
-         */
+        /// <summary>
+        /// 给玩家物品
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
+        /// <param name="itemType">给的物品类型</param>
         public static void GiveItem(Player player, ItemType itemType)
         {
-            var itemName = Enum.GetName(typeof(ItemType), itemType);
-            player.AddItem(itemType);
-            if (itemName != null) BulkShowHint.Add($"你获得了 <color=#F4F245>{Zh[itemName]}</color>");
+            var itemName = Enum.GetName(typeof(ItemType), itemType);  // 获取物品名
+            player.AddItem(itemType);  // 给物品
+            if (itemName == null) return;  // 如果物品名为空则不执行下面的代码
+            BulkShowHint.Add($"你获得了 <color=#F4F245>{Zh[itemName]}</color>");
+            Log.Info($"GiveItem: {player.Nickname} 获得了 {Zh[itemName]}");
         }
 
-        /**
-         * 复制指定人的背包
-         */
+        /// <summary>
+        /// 复制指定玩家的背包
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
+        /// <param name="targetPlayer">目标玩家（被复制的）</param>
         public static void CopyOthersInventory(Player player, Player targetPlayer)
         {
-            player.ClearItems();
+            player.ClearItems();  // 清空所有物品
+            
+            // 复制目标玩家的物品给当前玩家
             foreach (var inventoryItem in targetPlayer.Inventory.UserInventory.Items)
             {
                 player.AddItem((ItemType)inventoryItem.Key);
@@ -326,47 +416,63 @@ namespace CoinLottery
 
             BulkShowHint.Add($"你复制了{targetPlayer.Nickname}的背包");
             targetPlayer.ShowHint($"{player.Nickname}复制了你的背包");
+            Log.Info($"CopyOthersInventory: {player.Nickname} 复制了 {targetPlayer.Nickname} 的背包");
         }
 
-        /**
-         * 指定区域断电
-         */
-        public static void TurnOffLight(Player player, MapGeneration.FacilityZone zone)
+        /// <summary>
+        /// 关闭指定区域的灯光
+        /// </summary>
+        /// <param name="zone">指定的区域</param>
+        public static void TurnOffLight(MapGeneration.FacilityZone zone)
         {
-            BulkShowHint.Add($"在<color=#E04747>{ZoneZh[zone]}</color>启用关灯事件");
-            var where = RoomLightController.Instances.Where(instance => instance.Room.Zone == zone);
+            var where = RoomLightController.Instances.Where(instance => instance.Room.Zone == zone);  // 获取指定区域的灯光
+            
+            // 关闭指定区域的灯光
             foreach (var instance in where)
             {
                 instance.ServerFlickerLights(10.0f);
             }
+
+            BulkShowHint.Add($"在<color=#E04747>{ZoneZh[zone]}</color>启用关灯事件");
+            Log.Info($"TurnOffLight: 在 {ZoneZh[zone]} 启用关灯事件");
         }
 
-        /**
-         * 物品掉落
-         */
+        /// <summary>
+        /// 让玩家掉落所有物品
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
         public static void DropAllItems(Player player)
         {
-            player.DropItems();
+            player.DropItems();  // 丢弃所有物品
             BulkShowHint.Add("你的物品掉落了");
+            Log.Info($"DropAllItems: {player.Nickname} 的物品掉落了");
         }
 
+        /// <summary>
+        /// 移除玩家手中的硬币
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
         public static void RemoveCoin(Player player)
         {
-            player.RemoveHeldItem();
+            player.RemoveHeldItem();  // 移除手中的物品
             BulkShowHint.Add("硬币消失了");
+            Log.Info("RemoveCoin: 硬币消失了");
         }
 
-        /**
-         * 被夺舍
-         */
+        /// <summary>
+        /// 指定玩家夺舍自己
+        /// </summary>
+        /// <param name="player">当前玩家（投硬币的）</param>
+        /// <param name="targetPlayer">目标玩家</param>
         public static void ControlOther(Player player, Player targetPlayer)
         {
-            targetPlayer.RoleManager.ServerSetRole(player.Role.Type, RoleChangeReason.Respawn);
-            targetPlayer.Teleport(player.Position);
-            CopyOthersInventory(targetPlayer, player);
-            player.ClearInventory();
-            player.Kill($"被{targetPlayer.Nickname}夺舍了");
-            targetPlayer.ShowHint($"你夺舍了{player.Nickname}的身体");
+            targetPlayer.RoleManager.ServerSetRole(player.Role.Type, RoleChangeReason.Respawn);  // 让目标玩家变成当前玩家的角色
+            targetPlayer.Teleport(player.Position);  // 传送目标玩家到当前玩家的位置
+            CopyOthersInventory(targetPlayer, player);  // 复制当前玩家的背包给目标玩家
+            player.ClearInventory();  // 清空当前玩家的背包
+            player.Kill($"被{targetPlayer.Nickname}夺舍了");  // 杀死当前玩家
+            targetPlayer.ShowHint($"你夺舍了{player.Nickname}的身体");  // 提示目标玩家夺舍成功
+            Log.Info($"ControlOther: {player.Nickname} 被 {targetPlayer.Nickname} 夺舍了");  // 记录日志
         }
     }
 }
