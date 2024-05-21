@@ -18,6 +18,7 @@ namespace CoinLottery
             Exiled.Events.Handlers.Player.FlippingCoin += EventHandlers.OnFlippingCoin;
             Exiled.Events.Handlers.Player.Spawned += EventHandlers.OnSpawned;
             Exiled.Events.Handlers.Player.Died += EventHandlers.OnDied;
+            Exiled.Events.Handlers.Player.Left += EventHandlers.OnLeft;
             base.OnEnabled();
         }
         
@@ -26,6 +27,7 @@ namespace CoinLottery
             Exiled.Events.Handlers.Player.FlippingCoin -= EventHandlers.OnFlippingCoin;
             Exiled.Events.Handlers.Player.Spawned -= EventHandlers.OnSpawned;
             Exiled.Events.Handlers.Player.Died -= EventHandlers.OnDied;
+            Exiled.Events.Handlers.Player.Left -= EventHandlers.OnLeft;
             EventHandlers = null;
             base.OnDisabled();
         }

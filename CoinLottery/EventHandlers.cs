@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Exiled.API.Extensions;
 using Exiled.API.Features;
 using Exiled.Events.EventArgs.Player;
 using PlayerRoles;
@@ -54,7 +55,8 @@ namespace CoinLottery
             if (_playerList.Contains(player)) return; // 如果玩家已经在玩家列表，则不添加玩家
             _playerList.Add(player); // 添加玩家至玩家列表
             if (!Config.Debug) return;
-            Log.Info($"OnSpawned _playerList: {_playerList}");
+            Log.Info($"OnSpawned: _playerList: {GetListString(_playerList)}");
+            Log.Info($"OnSpawned: _deadPlayerList: {GetListString(_deadPlayerList)}");
             Log.Info($"OnSpawned: {player.Nickname} OnSpawned");
         }
 
@@ -64,13 +66,43 @@ namespace CoinLottery
         /// <param name="ev">事件</param>
         public void OnDied(DiedEventArgs ev)
         {
-            var player = ev.Player;
-            _playerList.Remove(player); // 死亡时移出玩家列表
-            if (_deadPlayerList.Contains(player)) return;
-            _deadPlayerList.Add(player);
+            var isSuccessful = PlayerOut(ev.Player);
             if (!Config.Debug) return;
-            Log.Info($"OnDied _deadPlayerList: {_deadPlayerList}");
-            Log.Info($"OnDied: {player.Nickname} OnDied");
+            Log.Info($"OnDied 移除玩家: {isSuccessful}");
+        }
+        
+        public void OnLeft(LeftEventArgs ev)
+        {
+            if (_playerList.Contains(ev.Player))
+            {
+                _playerList.Remove(ev.Player);
+            }
+
+            if (_deadPlayerList.Contains(ev.Player))
+            {
+                _deadPlayerList.Remove(ev.Player);
+            }
+
+            if (!Config.Debug) return;
+            Log.Info($"OnLeft: _playerList: {GetListString(_playerList)}");
+            Log.Info($"OnLeft: _deadPlayerList: {GetListString(_deadPlayerList)}");
+        }
+        
+        private bool PlayerOut(Player player)
+        {
+            _playerList.Remove(player); // 死亡时移出玩家列表
+            if (_deadPlayerList.Contains(player)) return false;
+            _deadPlayerList.Add(player);
+            if (!Config.Debug) return true;
+            Log.Info($"PlayerOut: _playerList: {GetListString(_playerList)}");
+            Log.Info($"PlayerOut: _deadPlayerList: {GetListString(_deadPlayerList)}");
+            Log.Info($"PlayerOut: {player.Nickname}");
+            return true;
+        }
+        
+        private static string GetListString(ArrayList list)
+        {
+            return list.Cast<object>().Aggregate("", (current, player) => current + $"{((Player)player).Nickname}, ");
         }
     }
 
@@ -184,8 +216,8 @@ namespace CoinLottery
                 RoleTypeId.Scp049, RoleTypeId.Scp096, RoleTypeId.Scp106, RoleTypeId.Scp173,
                 RoleTypeId.Scp939, RoleTypeId.Scp0492
             };
-            var rand = Random.Range(0, 6);
-            var roleTypeId = roleTypeIds[rand];
+            // var rand = Random.Range(0, 6);
+            var roleTypeId = roleTypeIds.ToArray().GetRandomValue();
             CustomCoinEvents.TurnToRole(player, roleTypeId);
             if (roleTypeId != RoleTypeId.Scp0492) return;  // 如果不是SCP-049-2则不执行下面的代码
             // 给武器和设置血量为500
@@ -236,14 +268,16 @@ namespace CoinLottery
         private static void CopyRandomPlayerInventory(Player player, ArrayList simplePlayerList)
         {
             var playerListCount = simplePlayerList.Count;  // 玩家数量
-            var rand = Random.Range(0, playerListCount);
-            var randPlayer = (Player)simplePlayerList[rand];
+            /*var rand = Random.Range(0, playerListCount);
+            var randPlayer = (Player)simplePlayerList[rand];*/
+            var randPlayer = (Player)simplePlayerList.ToArray().GetRandomValue();
             var times = 0;  // 防止死循环
             // 随机玩家，直到不是当前玩家
             while (randPlayer.Id == player.Id && times < playerListCount)
             {
-                rand = Random.Range(0, playerListCount);
-                randPlayer = (Player)simplePlayerList[rand];
+                // rand = Random.Range(0, playerListCount);
+                // randPlayer = (Player)simplePlayerList[rand];
+                randPlayer = (Player)simplePlayerList.ToArray().GetRandomValue();
                 times++;
             }
 
@@ -278,15 +312,16 @@ namespace CoinLottery
             if (playerCount == 0)
             {
                 BulkShowHint.Add("你试图夺舍，但是没有目标");
+                return;
             }
 
-            var targetPlayer = (Player)simplePlayerList[Random.Range(0, playerCount)];
+            var targetPlayer = (Player)simplePlayerList.ToArray().GetRandomValue();
             var times = 0;
             
             // 随机玩家，直到玩家为观察者或者遍历完所有玩家
             while (!targetPlayer.IsOverwatchEnabled && times < playerCount)
             {
-                targetPlayer = (Player)simplePlayerList[Random.Range(0, playerCount)];
+                targetPlayer = (Player)simplePlayerList.ToArray().GetRandomValue();
                 times++;
             }
 
